@@ -6,14 +6,11 @@ services:
     container_name: crypto-lab
     tty: true
     stdin_open: true
-    user: "1001:1001"
     volumes:
-      # Persist GnuPG keyring across container restarts
-      - gnupg-data:/home/cryptouser/.gnupg
-      # Mount project directory for live script editing
+      - gnupg-data:/root/.gnupg
       - .:/workspace
     environment:
-      - GNUPGHOME=/home/cryptouser/.gnupg
+      - GNUPGHOME=/root/.gnupg
       - GPG_TTY=/dev/null
     working_dir: /workspace
 

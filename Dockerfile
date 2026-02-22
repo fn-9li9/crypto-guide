@@ -25,7 +25,7 @@ WORKDIR /workspace
 
 COPY . /workspace/
 
-RUN chmod +x /workspace/scripts/*.fish 2>/dev/null || true
+RUN chmod +x /workspace/scripts/*.fish /workspace/scripts/*.sh 2>/dev/null || true
 
 ENV GNUPGHOME=/root/.gnupg
 ENV GPG_TTY=/dev/null

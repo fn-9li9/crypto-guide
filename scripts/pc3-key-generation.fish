@@ -9,9 +9,18 @@ set GNUPGHOME "$GNUPGHOME"
 
 function check_existing_keys
     echo "--- Checking existing keys in keyring ---"
-    set key_count (gpg --batch --list-keys 2>/dev/null | grep -c "^pub" || echo 0)
+    
+    # Count existing public keys safely (fish-compatible)
+    set key_count (gpg --batch --list-keys --with-colons 2>/dev/null | grep "^pub" | count)
+
+    # Ensure numeric fallback
+    if test -z "$key_count"
+        set key_count 0
+    end
+
     echo "Keys currently in keyring: $key_count"
-    if test $key_count -gt 0
+
+    if test "$key_count" -gt 0
         gpg --batch --list-keys
     end
 end
@@ -56,7 +65,7 @@ function export_public_key
     # It allows others to encrypt messages that only we can decrypt
     gpg --batch \
         --armor \
-        --export "cryptolab@sre-lab.local" \
+        --export "stella.sre.inc@gmail.com" \
         > /workspace/samples/cryptolab_public.asc 2>/dev/null
 
     if test $status -eq 0
@@ -66,7 +75,7 @@ function export_public_key
         head -6 /workspace/samples/cryptolab_public.asc
         echo "..."
     else
-        echo "ERROR: Export failed. Ensure a key exists for cryptolab@sre-lab.local"
+        echo "ERROR: Export failed. Ensure a key exists for stella.sre.inc@gmail.com"
     end
 end
 
@@ -74,7 +83,7 @@ function show_key_fingerprint
     echo ""
     echo "--- Key Fingerprint ---"
     echo "Fingerprints are used to verify key authenticity out-of-band."
-    gpg --batch --fingerprint "cryptolab@sre-lab.local" 2>/dev/null
+    gpg --batch --fingerprint "stella.sre.inc@gmail.com" 2>/dev/null
 end
 
 # --- Main execution ---

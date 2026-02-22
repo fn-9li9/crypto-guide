@@ -103,7 +103,7 @@ Highlight key points with these fun boxes (and more):
 
 == Citations, Acronyms and Glossary
 
-Add citations with `@` like @xd
+Add citations with `@` like @zahnoDynamicProjectPlanning2023
 
 Acronym terms like #gls("it") expand on first use and abbreviate after #gls("it"). Glossary items such as #gls("rust") can also be used to show their description as such: #gls-description("rust"). Acronyms and glossary entries auto-generate at the document's end (defined in `/tail/glossary.typ`).
 

@@ -208,10 +208,50 @@ informacion sensible, garantizando que la clave no ha sido sustituida por un ata
 
 == CP4: Certificado de Revocacion
 
-// Pendiente: captura de terminal con la ejecucion de
-// fish /workspace/scripts/pc4-revocation-certificate.fish
-// Incluir: primeras lineas del certificado de revocacion generado,
-// advertencias de seguridad mostradas por el script.
+El cuarto caso practico genera un certificado de revocacion para la clave RSA 4096
+creada en CP3. Un certificado de revocacion es un documento firmado criptograficamente
+que, al publicarse, notifica a todos los usuarios que la clave publica asociada ya no debe
+usarse para cifrar nuevos mensajes. Su generacion inmediatamente despues de crear el
+par de claves es una practica de seguridad fundamental: si la clave privada queda
+comprometida o se pierde la frase de paso, el certificado permite revocarla incluso sin
+acceso a la clave privada.
+
+#figure(
+  image("../resources/img/cp-4-1.png", width: 100%),
+  caption: [Generacion del certificado de revocacion para la clave CD9C...0090],
+)
+
+El script identifica la clave principal por su fingerprint completo (no por email, para
+evitar ambiguedad cuando existen multiples claves con el mismo uid), y usa `expect`
+para conducir la sesion interactiva de `gpg --gen-revoke` via un pseudo-TTY real,
+ya que GPG 2.4 rechaza el modo batch para este comando. El certificado generado
+se almacena en `/workspace/samples/revocation/revocation_cert.asc` (942 bytes) y
+comienza con la cabecera estandar:
+```
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+Comment: This is a revocation certificate
+iQJbBCABCgBFFiEEzZxjp8B1C63Z97Mj7nPMiFn/AJAFAmmbhkknHQBQcmVjYXV0
+...
+-----END PGP PUBLIC KEY BLOCK-----
+```
+
+El script documenta ademas los cuatro codigos de razon de revocacion definidos en el
+estandar OpenPGP: 0 (sin razon especificada, uso precautorio), 1 (clave comprometida),
+2 (clave reemplazada por una nueva) y 3 (clave en desuso). En este caso se usa el
+codigo 0 por tratarse de un certificado precautorio creado inmediatamente tras la
+generacion del par.
+
+Las advertencias de seguridad mostradas al final del script reflejan las mejores
+practicas operativas: el certificado debe almacenarse en un medio cifrado offline
+(USB cifrado, caja de seguridad fisica), ya que cualquier persona que lo obtenga
+puede invalidar la clave publica publicandolo en un servidor de claves. A diferencia
+de la clave privada, el certificado de revocacion no permite descifrar mensajes ni
+firmar documentos: su unico efecto es anunciar que la clave ya no es de confianza.
+
+Una propiedad importante del mecanismo de revocacion es que una clave publica
+revocada conserva su capacidad de verificar firmas anteriores a la revocacion, pero
+no puede usarse para cifrar nuevos mensajes. Esto garantiza la auditabilidad de
+documentos firmados antes del compromiso de la clave.
 
 // ============================================================
 // CP5 - Intercambio de Claves

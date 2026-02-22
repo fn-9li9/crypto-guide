@@ -1,4 +1,4 @@
-# Guia de Automatizacion Criptografica y Sistemas de Identificacion Digital
+# Automatizacion Criptografica y Sistemas de Identificacion Digital
 
 ## Perspectiva de Ingenieria de Fiabilidad de Sitios (SRE)
 

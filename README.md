@@ -1,118 +1,56 @@
 # Laboratorio de Automatizacion Criptografica - Perspectiva SRE
 
-Repositorio de automatizacion criptografica reproducible, orientado a la fiabilidad de infraestructuras, gestion del ciclo de vida de claves e identidades digitales, y ejecucion determinista de procesos criptograficos.
-
-El entorno esta completamente contenido en Docker utilizando una imagen basada en **Nix**, garantizando reproducibilidad independiente del sistema anfitrion.
+Repositorio de automatizacion criptografica reproducible, orientado a la fiabilidad de
+infraestructuras y al ciclo de vida de claves e identidades digitales.
 
 ---
 
 ## Requisitos
 
-- Docker 20.10 o superior
-- Docker Compose CLI moderno (`docker compose`)
-- No se requieren dependencias adicionales en el sistema anfitrion
-
-El entorno completo (GnuPG, OpenSSL, Fish, Vim, pinentry, etc.) se instala dentro del contenedor mediante Nix.
+- Docker (version 20.10 o superior recomendada)
+- Docker Compose (CLI moderno: `docker compose`, incluido en Docker Desktop y Docker Engine 20.10+)
+- Sin dependencias adicionales en el sistema anfitrion: el contenedor provee el entorno completo
 
 ---
 
-## Arquitectura del Entorno
-
-- Imagen base: `nixos/nix`
-- Gestor de paquetes: Nix
-- Shell principal: Fish
-- Material criptografico persistido mediante volumen Docker
-- Ejecucion no interactiva de GPG usando:
-  - `--batch`
-  - `--yes`
-  - `--pinentry-mode loopback`
-
-El directorio de claves se ubica en:
-
-```
-/root/.gnupg
-```
-
-y se persiste mediante el volumen:
-
-```
-gnupg-data
-```
-
----
-
-## Construccion del Entorno
+## Construccion del entorno
 
 ```
 docker compose build
 ```
 
-Este comando:
+Este comando construye la imagen a partir del `Dockerfile` incluido. La imagen instala
+GnuPG, OpenSSL, Fish shell, pinentry-curses y demas herramientas sobre `nixos/nix`
+mediante `nix-env`. El proceso es determinista y reproducible.
 
-1. Descarga la imagen `nixos/nix`
-2. Actualiza los canales Nix
-3. Instala:
-   - gnupg
-   - fish
-   - openssl
-   - vim
-   - pinentry-curses
-   - cacert
-
-4. Configura `gpg-agent` para permitir `loopback pinentry`
-
-El resultado es un entorno determinista y reproducible.
+La primera construccion descarga los paquetes de Nixpkgs y puede tardar varios minutos.
+Las reconstrucciones posteriores aprovechan la cache de capas de Docker.
 
 ---
 
-## Ejecucion del Laboratorio
+## Ejecucion del laboratorio
 
 ```
 docker compose run crypto-lab
 ```
 
-Esto inicia una sesion interactiva en el contenedor.
+Inicia una sesion interactiva en Fish shell como root. Todos los scripts estan disponibles
+en `/workspace/scripts/`.
 
-Dentro del contenedor:
-
-```
-fish
-```
-
-Los scripts estan disponibles en:
-
-```
-/workspace/scripts/
-```
-
----
-
-## Ejecucion de Casos Practicos
-
-### Cifrados clasicos
+Ejecucion de casos practicos en orden:
 
 ```
 fish /workspace/scripts/pc1-polybius-cipher.fish
-```
-
-### Criptografia moderna con GPG
-
-```
 fish /workspace/scripts/pc2-symmetric-encryption.fish
 fish /workspace/scripts/pc3-key-generation.fish
 fish /workspace/scripts/pc4-revocation-certificate.fish
 fish /workspace/scripts/pc5-key-exchange.fish
 fish /workspace/scripts/pc6-digital-signature.fish
-```
-
-### Infraestructura de certificados (OpenSSL)
-
-```
 bash /workspace/scripts/pc7-certificate-authority.sh
 bash /workspace/scripts/pc8-certificate-request.sh
 ```
 
-### Caso 9 (Guia conceptual)
+El caso practico 9 es una guia conceptual en Markdown:
 
 ```
 cat /workspace/scripts/pc9-secure-email.md
@@ -120,117 +58,59 @@ cat /workspace/scripts/pc9-secure-email.md
 
 ---
 
-## Destruccion del Entorno
-
-Para detener contenedores:
-
-```
-docker compose down
-```
-
-Para eliminar tambien el material criptografico persistido:
+## Destruccion del entorno
 
 ```
 docker compose down -v
 ```
 
-La opcion `-v` elimina el volumen `gnupg-data`, borrando completamente el keyring.
+La opcion `-v` elimina el volumen `gnupg-data`, borrando todas las claves GPG
+generadas durante el laboratorio. Garantiza un reinicio limpio sin material criptografico
+residual del ciclo anterior.
 
 ---
 
-## Explicacion de Reproducibilidad con Nix
+## Explicacion del aislamiento y reproducibilidad
 
-### Por que Nix garantiza determinismo
+### Imagen base NixOS
 
-Nix instala paquetes mediante derivaciones inmutables almacenadas en:
+La imagen `nixos/nix` utiliza el gestor de paquetes Nix, que garantiza que cada
+paquete instalado (GnuPG, OpenSSL, Fish) tiene una version exacta y reproducible
+determinada por el canal de Nixpkgs activo en el momento del build. A diferencia de
+`apt-get`, Nix no modifica el sistema base: todos los paquetes se instalan en el store
+de Nix (`/nix/store`) con hashes criptograficos que identifican exactamente cada
+version y sus dependencias transitivas.
 
-```
-/nix/store
-```
+El contenedor ejecuta como root porque la imagen `nixos/nix` no dispone de las
+utilidades de gestion de usuarios (`useradd`, `adduser`) propias de distribuciones
+como Debian o Alpine. Para un despliegue en produccion se recomienda construir sobre
+una imagen derivada que incluya estas herramientas, o bien gestionar el acceso
+mediante politicas de Docker y capabilities.
 
-Cada paquete esta identificado por un hash criptografico que depende de:
+### Como los volumenes preservan el material criptografico
 
-- Version exacta
-- Dependencias
-- Parametros de compilacion
+El volumen `gnupg-data` monta `/root/.gnupg` dentro del contenedor. Las claves
+generadas en una sesion persisten en la siguiente sin necesidad de regenerarlas.
+Al ejecutar `docker compose down -v` el volumen se elimina, lo que equivale a
+destruir el anillo de claves por completo.
 
-Esto elimina:
+### Implicaciones de seguridad
 
-- "Works on my machine"
-- Drift entre entornos
-- Dependencias implicitas del sistema anfitrion
+- El directorio de claves `/root/.gnupg` tiene permisos 700, evitando lectura por
+  otros procesos dentro del contenedor.
+- Las frases de paso estan definidas en los scripts con fines educativos. En produccion
+  deben provenir de un gestor de secretos (HashiCorp Vault, AWS Secrets Manager).
+- `NIX_SSL_CERT_FILE` apunta al bundle de certificados raiz para que OpenSSL
+  y GnuPG puedan verificar conexiones TLS desde dentro del contenedor NixOS.
+- Los scripts de Bash usan `set -euo pipefail` para detener la ejecucion ante el
+  primer error, evitando estados parciales silenciosos.
 
-El entorno es identico en:
+### Limitaciones
 
-- Windows (Docker Desktop)
-- macOS
-- Linux
-
----
-
-## Automatizacion No Interactiva (SRE Approach)
-
-Los scripts usan:
-
-- `--batch`
-- `--yes`
-- `--pinentry-mode loopback`
-- Configuracion `allow-loopback-pinentry` en `gpg-agent.conf`
-
-Esto permite:
-
-- Ejecucion en CI/CD
-- Integracion en pipelines
-- Automatizacion completa sin intervencion humana
-
----
-
-## Persistencia del Material Criptografico
-
-El volumen:
-
-```
-gnupg-data
-```
-
-monta:
-
-```
-/root/.gnupg
-```
-
-Esto permite:
-
-- Mantener claves entre reinicios
-- Simular ciclo de vida real
-- Evitar regeneracion innecesaria
-
-En entornos productivos, este volumen deberia:
-
-- Estar cifrado a nivel de filesystem
-- Tener control de acceso estricto
-- Integrarse con un HSM o gestor de secretos
-
----
-
-## Implicaciones de Seguridad
-
-- El aislamiento lo provee Docker como boundary de ejecucion.
-- El contenedor no modifica el sistema anfitrion.
-- Las claves privadas permanecen dentro del volumen.
-- Las passphrases en scripts son educativas.
-- En produccion deben provenir de:
-  - Vault
-  - AWS Secrets Manager
-  - Azure Key Vault
-  - GCP Secret Manager
-
----
-
-## Limitaciones del Laboratorio
-
-- No es un entorno productivo.
-- Las passphrases en texto plano son solo para fines academicos.
-- El volumen Docker no esta cifrado por defecto.
-- Los certificados generados en PC7/PC8 son autofirmados.
-- No se implementa HSM ni proteccion hardware.
+- El contenedor ejecuta como root al no haber gestion de usuarios en la imagen base.
+- Las frases de paso en texto plano en los scripts son aceptables en laboratorio pero
+  inaceptables en produccion.
+- Los certificados de la CA (PC7/PC8) son autofirmados y no reconocidos por
+  navegadores sin importacion manual del certificado raiz.
+- La primera construccion de la imagen puede tardar 5-10 minutos por la descarga
+  de paquetes desde el canal de Nixpkgs.

@@ -20,7 +20,7 @@ function create_sample_document
     echo "========================" >> "$ORIGINAL_FILE"
     echo "This document contains sensitive information." >> "$ORIGINAL_FILE"
     echo "Date: "(date) >> "$ORIGINAL_FILE"
-    echo "Author: SRE Cryptography Lab" >> "$ORIGINAL_FILE"
+    echo "Author: stella" >> "$ORIGINAL_FILE"
     echo "Content: Symmetric encryption demonstration using GnuPG AES-256." >> "$ORIGINAL_FILE"
     echo "Document created successfully: $ORIGINAL_FILE"
 end
@@ -103,8 +103,9 @@ function verify_integrity
     echo ""
     echo "--- INTEGRITY VERIFICATION ---"
     # Compare SHA256 hashes of original and decrypted files
-    set orig_hash (sha256sum "$ORIGINAL_FILE" | awk '{print $1}')
-    set dec_hash  (sha256sum "$DECRYPTED_FILE" | awk '{print $1}')
+    # Use Fish string split instead of awk (awk not installed in nixos/nix base)
+    set orig_hash (string split ' ' (sha256sum "$ORIGINAL_FILE"))[1]
+    set dec_hash  (string split ' ' (sha256sum "$DECRYPTED_FILE"))[1]
 
     echo "Original  SHA256: $orig_hash"
     echo "Decrypted SHA256: $dec_hash"

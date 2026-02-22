@@ -259,10 +259,51 @@ documentos firmados antes del compromiso de la clave.
 
 == CP5: Intercambio de Claves con GPG
 
-// Pendiente: captura de terminal con la ejecucion de
-// fish /workspace/scripts/pc5-key-exchange.fish
-// Incluir: exportacion de clave publica, importacion al anillo,
-// mensaje cifrado (primeras lineas del .asc), descifrado exitoso.
+El quinto caso practico demuestra el flujo completo de intercambio de claves publicas
+entre dos entidades simuladas (Alice y Bob) usando la clave RSA 4096 de Stella como
+clave de laboratorio. El objetivo es evidenciar como la criptografia asimetrica resuelve
+el problema de distribucion de claves que hace inviable la criptografia simetrica a escala.
+
+#figure(
+  image("../resources/img/cp-5-1.png", width: 100%),
+  caption: [Exportacion de la clave publica de Alice e importacion al anillo de Bob],
+)
+
+Alice exporta su clave publica al archivo `alice_public.asc` mediante redireccion de
+stdout (`gpg --armor --export > archivo`). Bob importa ese archivo a su anillo de
+claves con `gpg --import`. GPG confirma que la clave ya existia en el anillo
+(`not changed: 1`), lo que es el comportamiento esperado en un laboratorio donde
+Alice y Bob comparten el mismo keyring. En un escenario real, Bob recibiria el archivo
+`.asc` por correo electronico, servidor de claves PGP o cualquier canal, incluso uno
+no seguro, porque la clave publica no es un secreto.
+
+#figure(
+  image("../resources/img/cp-5-2.png", width: 100%),
+  caption: [Cifrado del mensaje por Bob y descifrado exitoso por Alice],
+)
+
+Bob cifra un mensaje de texto plano usando la clave publica de Alice con
+`gpg --encrypt --recipient`. El resultado es un bloque PGP cifrado que solo Alice
+puede descifrar:
+```
+-----BEGIN PGP MESSAGE-----
+hQIMA7AEpVhj+tD6ARAAqaRGEdKVFx0mcr6ZSK1IbWqtXNNrb1E0kKbsvb9ayNsi
+...
+-----END PGP MESSAGE-----
+```
+
+Alice descifra el mensaje con su clave privada y la frase de paso. El contenido
+recuperado es identico al original, confirmando que el ciclo cifrado-descifrado
+asimetrico es correcto y sin perdida.
+
+El resumen final del script cuantifica el problema que resuelve la criptografia asimetrica.
+Con criptografia simetrica, 100 usuarios necesitarian 4950 claves compartidas distintas,
+cada una intercambiada por un canal seguro previo. Con criptografia asimetrica, cada
+usuario necesita un unico par de claves independientemente del numero de
+interlocutores, y la clave publica puede distribuirse libremente por cualquier canal
+sin comprometer la seguridad del sistema. Los servidores de claves publicos
+(`keys.openpgp.org`, `keyserver.ubuntu.com`) actuan como directorios globales donde
+cualquier usuario puede publicar y buscar claves publicas.
 
 // ============================================================
 // CP6 - Firma Digital

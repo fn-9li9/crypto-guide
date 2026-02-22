@@ -7,7 +7,7 @@
 # - Encrypt a message for another user using their public key
 # - Decrypt a message using your own private key
 
-set PASSPHRASE "CryptoLab2024!"
+set PASSPHRASE "fn-stella-sre"
 set SAMPLES_DIR "/workspace/samples"
 set KEYRING_DIR "/workspace/samples/keyring-demo"
 
@@ -16,13 +16,16 @@ function simulate_user_alice
     # In a real scenario, Alice would run this on her own machine
     # Alice's key is our lab key; we simulate a second user for the exchange
 
-    gpg --batch \
-        --armor \
-        --export "cryptolab@sre-lab.local" \
-        --output "$KEYRING_DIR/alice_public.asc" 2>/dev/null
+    # Capture stdout directly to file (more reliable than --output in some GPG builds)
+    gpg --batch --armor --export "stella.sre.inc@gmail.com" > "$KEYRING_DIR/alice_public.asc" 2>/dev/null
 
-    if test -f "$KEYRING_DIR/alice_public.asc"
+    if test -s "$KEYRING_DIR/alice_public.asc"
         echo "Alice's public key exported to: $KEYRING_DIR/alice_public.asc"
+        echo ""
+        echo "First 4 lines of exported public key:"
+        head -4 "$KEYRING_DIR/alice_public.asc"
+        echo "..."
+        echo ""
         echo "This file is safe to share publicly."
     else
         echo "ERROR: Could not export public key. Ensure PC3 was completed first."
@@ -72,7 +75,7 @@ function encrypt_for_recipient
         --yes \
         --armor \
         --encrypt \
-        --recipient "cryptolab@sre-lab.local" \
+        --recipient "stella.sre.inc@gmail.com" \
         --output "$encrypted_file" \
         "$message_file" 2>/dev/null
 
@@ -89,7 +92,7 @@ function encrypt_for_recipient
             --armor \
             --trust-model always \
             --encrypt \
-            --recipient "cryptolab@sre-lab.local" \
+            --recipient "stella.sre.inc@gmail.com" \
             --output "$encrypted_file" \
             "$message_file" 2>/dev/null
         if test $status -eq 0
@@ -166,5 +169,3 @@ and begin
     decrypt_message
     show_key_exchange_summary
 end
-
-echo "=============================================="

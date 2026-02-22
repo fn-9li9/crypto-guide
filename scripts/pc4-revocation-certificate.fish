@@ -1,79 +1,88 @@
 #!/usr/bin/env fish
 # pc4-revocation-certificate.fish
 # Practical Case 4: Revocation Certificate Generation
-# A revocation certificate should be created immediately after generating a key pair.
-# If the private key is compromised or lost, publishing this certificate notifies
-# all other users that the public key must no longer be trusted for encryption.
 
-set PASSPHRASE "CryptoLab2024!"
+set PASSPHRASE "fn-stella-sre"
 set REVOCATION_DIR "/workspace/samples/revocation"
 set REVOCATION_FILE "$REVOCATION_DIR/revocation_cert.asc"
 
+function get_primary_fingerprint
+    # Use Python to parse --with-colons output (no awk dependency)
+    python3 -c "
+import subprocess
+out = subprocess.check_output(
+    ['gpg','--batch','--list-keys','--with-colons'],
+    stderr=subprocess.DEVNULL
+).decode()
+fpr = None
+after_pub = False
+for line in out.splitlines():
+    if line.startswith('pub:'):
+        after_pub = True
+    elif line.startswith('fpr:') and after_pub:
+        fpr = line.split(':')[9]
+        after_pub = False
+if fpr:
+    print(fpr)
+"
+end
+
 function ensure_key_exists
     echo "--- Checking for key to revoke ---"
-    set key_id (gpg --batch --list-keys --with-colons 2>/dev/null | grep "^pub" | head -1 | cut -d: -f5)
-
-    if test -z "$key_id"
+    set fpr (get_primary_fingerprint)
+    if test -z "$fpr"
         echo "No key found. Run pc3-key-generation.fish first."
         return 1
     end
-
-    echo "Key found: $key_id"
-    echo "$key_id"
+    echo "Primary key fingerprint: $fpr"
 end
 
 function generate_revocation_certificate
-    set -l key_email "cryptolab@sre-lab.local"
+    set -l fpr (get_primary_fingerprint)
 
     echo ""
     echo "--- Generating Revocation Certificate ---"
-    echo "Target key: $key_email"
-    echo "Reason: Certificate created immediately after key generation (precautionary)"
+    echo "Target fingerprint: $fpr"
+    echo "Reason: Precautionary certificate (code 0 - unspecified)"
     echo ""
 
     mkdir -p "$REVOCATION_DIR"
 
-    # Fish shell does not support heredocs (<<).
-    # Feed answers via printf piped to --command-fd 0:
-    #   y       = confirm creating the revocation cert
-    #   0       = reason code: no reason specified
-    #   (text)  = optional description
-    #   (blank) = end of description
-    #   y       = confirm
-    printf "y\n0\nPrecautionary revocation certificate created right after key generation.\n\ny\n" | \
-        gpg --batch \
-            --yes \
-            --pinentry-mode loopback \
-            --passphrase "$PASSPHRASE" \
-            --command-fd 0 \
-            --status-fd 2 \
-            --output "$REVOCATION_FILE" \
-            --gen-revoke "$key_email" 2>/dev/null
+    # Write the expect script via Python to avoid Fish/heredoc quoting issues
+    set tmpexp (mktemp /tmp/revoke_XXXXXX.exp)
 
-    if test $status -eq 0; and test -s "$REVOCATION_FILE"
+    python3 -c "
+import sys
+fpr  = sys.argv[1]
+pwd  = sys.argv[2]
+out  = sys.argv[3]
+script = '''#!/usr/bin/env expect
+set timeout 30
+spawn gpg --yes --pinentry-mode loopback --passphrase {PWD} --output {OUT} --gen-revoke {FPR}
+expect {
+    -re {[Cc]reate a revocation} { send \"y\\r\"; exp_continue }
+    -re {Your decision}          { send \"0\\r\"; exp_continue }
+    -re {Enter an optional}      { send \"Precautionary revocation certificate.\\r\"; exp_continue }
+    -re {empty line}             { send \"\\r\"; exp_continue }
+    -re {[Ii]s this okay}        { send \"y\\r\"; exp_continue }
+    -re {[Pp]assphrase}          { send \"{PWD}\\r\"; exp_continue }
+    eof {}
+}
+'''.replace('{FPR}', fpr).replace('{PWD}', pwd).replace('{OUT}', out)
+with open(sys.argv[4], 'w') as f:
+    f.write(script)
+" "$fpr" "$PASSPHRASE" "$REVOCATION_FILE" "$tmpexp"
+
+    expect "$tmpexp" > /dev/null 2>&1
+    set result $status
+    rm -f "$tmpexp"
+
+    if test $result -eq 0; and test -s "$REVOCATION_FILE"
         echo "Revocation certificate saved to: $REVOCATION_FILE"
     else
-        # Fallback: some GPG builds ignore --command-fd with --batch;
-        # use the dedicated --gen-revoke batch syntax available in GPG 2.2+
-        echo "Trying batch revocation via Python helper..."
-        python3 -c "
-import subprocess, sys
-answers = b'y\n0\nPrecautionary cert\n\ny\n'
-result = subprocess.run(
-    ['gpg', '--batch', '--yes', '--pinentry-mode', 'loopback',
-     '--passphrase', '$PASSPHRASE', '--command-fd', '0',
-     '--output', '$REVOCATION_FILE', '--gen-revoke', '$key_email'],
-    input=answers, capture_output=True)
-sys.exit(result.returncode)
-" 2>/dev/null
-
-        if test $status -eq 0; and test -s "$REVOCATION_FILE"
-            echo "Revocation certificate saved to: $REVOCATION_FILE"
-        else
-            echo "NOTE: Automatic revocation cert generation requires GPG 2.2+."
-            echo "Run manually inside the container:"
-            echo "  gpg --gen-revoke cryptolab@sre-lab.local > $REVOCATION_FILE"
-        end
+        echo "ERROR: Could not generate revocation certificate."
+        echo "Run manually: gpg --gen-revoke $fpr"
+        return 1
     end
 end
 
@@ -87,6 +96,17 @@ function display_revocation_cert
         echo "Full path: $REVOCATION_FILE"
         echo "File size: "(wc -c < "$REVOCATION_FILE")" bytes"
     end
+end
+
+function show_revocation_reasons
+    echo ""
+    echo "--- Revocation Reason Codes (from textbook) ---"
+    printf "%-5s %-35s\n" "Code" "Reason"
+    printf "%-5s %-35s\n" "----" "------"
+    printf "%-5s %-35s\n" "0"    "No reason specified"
+    printf "%-5s %-35s\n" "1"    "Key has been compromised"
+    printf "%-5s %-35s\n" "2"    "Key superseded by new key"
+    printf "%-5s %-35s\n" "3"    "Key no longer used"
 end
 
 function show_revocation_warning
@@ -108,17 +128,6 @@ function show_revocation_warning
     echo "==================================="
 end
 
-function show_revocation_reasons
-    echo ""
-    echo "--- Revocation Reason Codes (from textbook) ---"
-    printf "%-5s %-35s\n" "Code" "Reason"
-    printf "%-5s %-35s\n" "----" "------"
-    printf "%-5s %-35s\n" "0"    "No reason specified"
-    printf "%-5s %-35s\n" "1"    "Key has been compromised"
-    printf "%-5s %-35s\n" "2"    "Key superseded by new key"
-    printf "%-5s %-35s\n" "3"    "Key no longer used"
-end
-
 # --- Main execution ---
 echo "=============================================="
 echo " PRACTICAL CASE 4: REVOCATION CERTIFICATE"
@@ -135,5 +144,3 @@ and begin
     show_revocation_reasons
     show_revocation_warning
 end
-
-echo "=============================================="

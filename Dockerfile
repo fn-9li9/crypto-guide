@@ -3,19 +3,21 @@ FROM nixos/nix
 LABEL maintainer="crypto-lab"
 LABEL description="Cryptographic automation laboratory - SRE"
 
-# Update channels and install required packages via nix-env
 RUN nix-channel --update && \
     nix-env -iA \
         nixpkgs.gnupg \
         nixpkgs.fish \
         nixpkgs.openssl \
-        nixpkgs.vim \
-        nixpkgs.pinentry-curses \
-        nixpkgs.cacert
+        nixpkgs.python3
+
+RUN nix-env -iA \
+    nixpkgs.pinentry-curses \
+    nixpkgs.cacert \
+    nixpkgs.expect \
+    nixpkgs.gawk
 
 ENV PATH=/root/.nix-profile/bin:/nix/var/nix/profiles/default/bin:$PATH
 
-# Configure GPG loopback
 RUN mkdir -p /root/.gnupg && \
     chmod 700 /root/.gnupg && \
     echo "allow-loopback-pinentry" > /root/.gnupg/gpg-agent.conf && \

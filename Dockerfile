@@ -1,20 +1,23 @@
-FROM debian:stable-slim
+FROM nixos/nix
 
 LABEL maintainer="crypto-lab"
-LABEL description="Cryptographic automation laboratory - SRE perspective"
+LABEL description="Cryptographic automation laboratory - SRE perspective (NixOS)"
 
-# Install required packages in a single layer to minimize image size
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gnupg \
-    fish \
-    openssl \
-    vim \
-    pinentry-curses \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# Update channels and install required packages via nix-env
+RUN nix-channel --update && \
+    nix-env -iA \
+        nixpkgs.gnupg \
+        nixpkgs.fish \
+        nixpkgs.openssl \
+        nixpkgs.vim \
+        nixpkgs.pinentry-curses \
+        nixpkgs.cacert \
+        nixpkgs.shadow
 
 # Create non-root user for secure execution
-RUN useradd -m -s /usr/bin/fish -u 1001 cryptouser
+# NixOS containers use shadow from nix-env
+RUN useradd -m -s /root/.nix-profile/bin/fish -u 1001 cryptouser || \
+    adduser -D -s /root/.nix-profile/bin/fish -u 1001 cryptouser
 
 # Configure GnuPG agent for non-interactive (loopback pinentry) usage
 RUN mkdir -p /home/cryptouser/.gnupg && \
@@ -22,6 +25,9 @@ RUN mkdir -p /home/cryptouser/.gnupg && \
     echo "allow-loopback-pinentry" > /home/cryptouser/.gnupg/gpg-agent.conf && \
     echo "default-cache-ttl 0" >> /home/cryptouser/.gnupg/gpg-agent.conf && \
     chown -R cryptouser:cryptouser /home/cryptouser/.gnupg
+
+# Make nix-installed binaries available system-wide
+ENV PATH=/root/.nix-profile/bin:/nix/var/nix/profiles/default/bin:$PATH
 
 # Set working directory
 WORKDIR /workspace
@@ -35,8 +41,10 @@ RUN chmod +x /workspace/scripts/*.fish /workspace/scripts/*.sh 2>/dev/null || tr
 # Switch to non-root user
 USER cryptouser
 
-# Set GPG_TTY for pinentry
+# Set GPG_TTY for pinentry and SSL cert bundle path (required in NixOS)
 ENV GPG_TTY=/dev/null
 ENV GNUPGHOME=/home/cryptouser/.gnupg
+ENV NIX_SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt
+ENV PATH=/root/.nix-profile/bin:/nix/var/nix/profiles/default/bin:$PATH
 
 CMD ["fish"]

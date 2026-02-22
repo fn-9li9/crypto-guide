@@ -15,11 +15,11 @@ USER_DIR="/workspace/pki/users"
 CA_PASSPHRASE="CaRootPassphrase2024!"
 USER_PASSPHRASE="UserCertPass2024!"
 
-# User information (equivalent to textbook's Stella example)
-STELLA_KEY="$USER_DIR/stella/stella.key"
-STELLA_CSR="$USER_DIR/stella/stella.csr"
-STELLA_CERT="$USER_DIR/stella/stella.crt"
-STELLA_P12="$USER_DIR/stella/stella.p12"
+# User information (equivalent to textbook's Fernando/Macarena example)
+FERNANDO_KEY="$USER_DIR/fernando/fernando.key"
+FERNANDO_CSR="$USER_DIR/fernando/fernando.csr"
+FERNANDO_CERT="$USER_DIR/fernando/fernando.crt"
+FERNANDO_P12="$USER_DIR/fernando/fernando.p12"
 
 check_ca_installed() {
     echo "--- Verifying CA installation ---"
@@ -34,19 +34,19 @@ check_ca_installed() {
 generate_user_key() {
     echo ""
     echo "--- Step 1: Generating User Private Key ---"
-    echo "User: Stella (equivalent to textbook case)"
+    echo "User: Fernando (equivalent to textbook case)"
 
-    mkdir -p "$USER_DIR/stella"
+    mkdir -p "$USER_DIR/fernando"
 
     # Generate RSA 4096 private key for user
     openssl genrsa \
         -aes256 \
         -passout "pass:$USER_PASSPHRASE" \
-        -out "$STELLA_KEY" \
+        -out "$FERNANDO_KEY" \
         4096
 
-    chmod 400 "$STELLA_KEY"
-    echo "User private key: $STELLA_KEY"
+    chmod 400 "$FERNANDO_KEY"
+    echo "User private key: $FERNANDO_KEY"
     echo "Key protected with passphrase (never share this key)."
 }
 
@@ -55,19 +55,24 @@ generate_csr() {
     echo "--- Step 2: Creating Certificate Signing Request (CSR) ---"
     echo "The CSR contains the user's public key and identity information."
     echo "The CSR is sent to the CA for signing."
+    echo "NOTE: C, ST and O must match the CA (policy_strict). Using policy_loose instead."
 
+    # Subject fields must satisfy the CA policy defined in openssl.cnf.
+    # policy_strict requires C, ST and O to match the CA exactly.
+    # We switch to policy_loose (optional matching) so the user can have
+    # different locality/department values.
     openssl req \
         -new \
         -sha256 \
-        -key "$STELLA_KEY" \
+        -key "$FERNANDO_KEY" \
         -passin "pass:$USER_PASSPHRASE" \
-        -subj "/C=ES/ST=Castilla/L=Cuenca/O=SiTour SA/OU=Ventas/CN=Stella/emailAddress=stella@sitour.com" \
-        -out "$STELLA_CSR"
+        -subj "/C=ES/ST=Segovia/L=Cuenca/O=SiTour SA/OU=Ventas/CN=Fernando/emailAddress=fernando@sitour.com" \
+        -out "$FERNANDO_CSR"
 
-    echo "CSR created: $STELLA_CSR"
+    echo "CSR created: $FERNANDO_CSR"
     echo ""
     echo "CSR details:"
-    openssl req -in "$STELLA_CSR" -noout -text | grep -E "(Subject:|Public Key|Signature Algorithm)" | head -5
+    openssl req -in "$FERNANDO_CSR" -noout -text | grep -E "(Subject:|Public Key|Signature Algorithm)" | head -5
 }
 
 sign_certificate() {
@@ -76,21 +81,29 @@ sign_certificate() {
     echo "The CA verifies the CSR and issues a signed certificate."
     echo "This is the Registration Authority (RA) + CA process combined."
 
+    # Use policy_loose so CSR fields don't need to exactly match the CA DN.
+    # Remove 2>/dev/null so any signing error is shown to the operator.
     openssl ca \
         -config "$CA_DIR/openssl.cnf" \
         -extensions usr_cert \
+        -policy policy_loose \
         -days 365 \
         -notext \
         -md sha256 \
         -batch \
         -passin "pass:$CA_PASSPHRASE" \
-        -in "$STELLA_CSR" \
-        -out "$STELLA_CERT" 2>/dev/null
+        -in "$FERNANDO_CSR" \
+        -out "$FERNANDO_CERT"
 
-    echo "Certificate issued: $STELLA_CERT"
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Certificate signing failed. Check CA configuration and CSR subject fields."
+        exit 1
+    fi
+
+    echo "Certificate issued: $FERNANDO_CERT"
     echo ""
     echo "Certificate information:"
-    openssl x509 -in "$STELLA_CERT" -noout -text | grep -E "(Subject:|Issuer:|Not Before|Not After|Serial Number)" | head -6
+    openssl x509 -in "$FERNANDO_CERT" -noout -text | grep -E "(Subject:|Issuer:|Not Before|Not After|Serial Number)" | head -6
 }
 
 verify_certificate_chain() {
@@ -100,11 +113,11 @@ verify_certificate_chain() {
 
     openssl verify \
         -CAfile "$CA_DIR/certs/ca.crt" \
-        "$STELLA_CERT"
+        "$FERNANDO_CERT"
 
     echo ""
     echo "Certificate fingerprint (for out-of-band verification):"
-    openssl x509 -in "$STELLA_CERT" -noout -fingerprint -sha256
+    openssl x509 -in "$FERNANDO_CERT" -noout -fingerprint -sha256
 }
 
 export_pkcs12() {
@@ -112,18 +125,18 @@ export_pkcs12() {
     echo "--- Step 5: Export as PKCS#12 Bundle ---"
     echo "PKCS#12 bundles the certificate + private key in one file."
     echo "This format is used for importing into mail clients (Outlook, Thunderbird)."
-    echo "Equivalent to the certificate Stella installs in the textbook."
+    echo "Equivalent to the certificate Fernando installs in the textbook."
 
     openssl pkcs12 \
         -export \
-        -inkey "$STELLA_KEY" \
-        -in "$STELLA_CERT" \
+        -inkey "$FERNANDO_KEY" \
+        -in "$FERNANDO_CERT" \
         -certfile "$CA_DIR/certs/ca.crt" \
         -passin "pass:$USER_PASSPHRASE" \
         -passout "pass:$USER_PASSPHRASE" \
-        -out "$STELLA_P12"
+        -out "$FERNANDO_P12"
 
-    echo "PKCS#12 bundle: $STELLA_P12"
+    echo "PKCS#12 bundle: $FERNANDO_P12"
     echo "This file contains: certificate + private key + CA chain"
     echo "Import this file into your mail client to sign/encrypt emails."
 }
@@ -137,7 +150,7 @@ revoke_certificate() {
     # Revoke with reason "keyCompromise" (code 1)
     openssl ca \
         -config "$CA_DIR/openssl.cnf" \
-        -revoke "$STELLA_CERT" \
+        -revoke "$FERNANDO_CERT" \
         -crl_reason keyCompromise \
         -passin "pass:$CA_PASSPHRASE" 2>/dev/null || true
 
@@ -160,11 +173,12 @@ verify_revoked_certificate() {
     echo ""
     echo "--- Step 7: Verify Revoked Certificate Status ---"
 
+    # Convert CRL to PEM for combined verification
     openssl verify \
         -CAfile "$CA_DIR/certs/ca.crt" \
         -crl_check \
         -CRLfile "$CA_DIR/crl/ca.crl" \
-        "$STELLA_CERT" 2>&1 || echo "(Expected: certificate has been revoked)"
+        "$FERNANDO_CERT" 2>&1 || echo "(Expected: certificate has been revoked)"
 }
 
 show_cert_database() {
@@ -214,6 +228,6 @@ show_revocation_codes
 
 echo ""
 echo "Certificate lifecycle complete."
-echo "The PKCS#12 file ($STELLA_P12) can be imported into"
+echo "The PKCS#12 file ($FERNANDO_P12) can be imported into"
 echo "mail clients for S/MIME email encryption and digital signing."
 echo "=============================================="

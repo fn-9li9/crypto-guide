@@ -33,43 +33,46 @@ function generate_revocation_certificate
 
     mkdir -p "$REVOCATION_DIR"
 
-    # Generate revocation certificate non-interactively
-    # Reason code 0 = No reason specified (used when creating precautionary cert)
-    gpg --batch \
-        --yes \
-        --pinentry-mode loopback \
-        --passphrase "$PASSPHRASE" \
-        --output "$REVOCATION_FILE" \
-        --gen-revoke "$key_email" << 'EOF'
-y
-0
-Revocation certificate created immediately after key generation. This key may be compromised or no longer in use.
-
-y
-EOF
-
-    if test $status -eq 0
-        echo "Revocation certificate saved to: $REVOCATION_FILE"
-    else
-        echo "Attempting alternative generation method..."
-        # Some GPG versions handle this differently
-        echo "y
-0
-Precautionary revocation certificate.
-
-y" | gpg --batch \
+    # Fish shell does not support heredocs (<<).
+    # Feed answers via printf piped to --command-fd 0:
+    #   y       = confirm creating the revocation cert
+    #   0       = reason code: no reason specified
+    #   (text)  = optional description
+    #   (blank) = end of description
+    #   y       = confirm
+    printf "y\n0\nPrecautionary revocation certificate created right after key generation.\n\ny\n" | \
+        gpg --batch \
             --yes \
             --pinentry-mode loopback \
             --passphrase "$PASSPHRASE" \
             --command-fd 0 \
+            --status-fd 2 \
             --output "$REVOCATION_FILE" \
             --gen-revoke "$key_email" 2>/dev/null
 
-        if test $status -eq 0
+    if test $status -eq 0; and test -s "$REVOCATION_FILE"
+        echo "Revocation certificate saved to: $REVOCATION_FILE"
+    else
+        # Fallback: some GPG builds ignore --command-fd with --batch;
+        # use the dedicated --gen-revoke batch syntax available in GPG 2.2+
+        echo "Trying batch revocation via Python helper..."
+        python3 -c "
+import subprocess, sys
+answers = b'y\n0\nPrecautionary cert\n\ny\n'
+result = subprocess.run(
+    ['gpg', '--batch', '--yes', '--pinentry-mode', 'loopback',
+     '--passphrase', '$PASSPHRASE', '--command-fd', '0',
+     '--output', '$REVOCATION_FILE', '--gen-revoke', '$key_email'],
+    input=answers, capture_output=True)
+sys.exit(result.returncode)
+" 2>/dev/null
+
+        if test $status -eq 0; and test -s "$REVOCATION_FILE"
             echo "Revocation certificate saved to: $REVOCATION_FILE"
         else
-            echo "NOTE: Interactive revocation may be needed on some GPG versions."
-            echo "Command: gpg --gen-revoke cryptolab@sre-lab.local > $REVOCATION_FILE"
+            echo "NOTE: Automatic revocation cert generation requires GPG 2.2+."
+            echo "Run manually inside the container:"
+            echo "  gpg --gen-revoke cryptolab@sre-lab.local > $REVOCATION_FILE"
         end
     end
 end

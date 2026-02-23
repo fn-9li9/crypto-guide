@@ -14,7 +14,8 @@ RUN nix-env -iA \
     nixpkgs.pinentry-curses \
     nixpkgs.cacert \
     nixpkgs.expect \
-    nixpkgs.gawk
+    nixpkgs.gawk \
+    nixpkgs.gnused
 
 ENV PATH=/root/.nix-profile/bin:/nix/var/nix/profiles/default/bin:$PATH
 

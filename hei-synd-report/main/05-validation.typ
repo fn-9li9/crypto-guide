@@ -311,10 +311,71 @@ cualquier usuario puede publicar y buscar claves publicas.
 
 == CP6: Firma Digital de un Documento
 
-// Pendiente: captura de terminal con la ejecucion de
-// fish /workspace/scripts/pc6-digital-signature.fish
-// Incluir: firma clearsign (documento + firma), verificacion exitosa,
-// demostracion de deteccion de manipulacion (BAD signature).
+El sexto caso practico demuestra las tres modalidades de firma digital con GnuPG y
+verifica la propiedad de integridad mediante una demostracion de deteccion de
+manipulacion. Antes de firmar, el script calcula el hash SHA-256 del documento para
+ilustrar que la firma opera sobre el resumen criptografico, no sobre el contenido
+completo:
+```
+3c0ade405ae26545e91a8cd5a5e01a43e8114e23d4a572d00900ea0239b350c2  contract.txt
+```
+
+#figure(
+  image("../resources/img/cp-6-1.png", width: 100%),
+  caption: [Hash SHA-256 del documento y firma en modalidad clearsign],
+)
+
+*Modalidad 1 — `--clearsign`*: el contenido del documento permanece legible en texto
+plano dentro del archivo `.asc`, con la firma PGP adjunta al final. Esta modalidad es
+idonea para correo electronico y documentos que los destinatarios deben poder leer
+sin software criptografico. El bloque firmado comienza con `-----BEGIN PGP SIGNED
+MESSAGE-----` seguido del contenido original del contrato y termina con el bloque
+`-----BEGIN PGP SIGNATURE-----`.
+
+#figure(
+  image("../resources/img/cp-6-2.png", width: 100%),
+  caption: [Firma detached en archivo separado y firma binaria comprimida],
+)
+
+*Modalidad 2 — `--detach-sign`*: la firma se almacena en un archivo independiente
+`contract.txt.sig`, sin modificar el documento original. Esta modalidad es la estandar
+para firmar artefactos binarios (ejecutables, imagenes Docker, paquetes de software)
+donde incrustar la firma alteraria el archivo. La verificacion requiere disponer de
+ambos archivos: el documento y el `.sig`.
+
+*Modalidad 3 — `--sign`*: documento y firma se comprimen en un unico archivo binario
+`contract_signed.gpg`. El contenido no es legible directamente; se extrae y verifica
+en un unico paso con `--decrypt`.
+
+#figure(
+  image("../resources/img/cp-6-3.png", width: 100%),
+  caption: [Verificacion de firmas y demostracion de deteccion de manipulacion],
+)
+
+La verificacion de las dos primeras modalidades produce en ambos casos:
+```
+gpg: Good signature from "stella (fn-stella-sre) <stella.sre.inc@gmail.com>" [ultimate]
+```
+
+La demostracion de deteccion de manipulacion es la prueba mas relevante del caso
+practico: se copia el archivo `contract_clearsigned.asc` a `contract_tampered.asc`
+y se reemplaza la cadena `one year` por `ten years` en el contenido. Al verificar
+el archivo manipulado, GPG detecta la discrepancia entre el hash firmado y el hash
+del contenido alterado:
+```
+gpg: BAD signature from "stella (fn-stella-sre) <stella.sre.inc@gmail.com>" [ultimate]
+```
+
+Este resultado confirma empiricamente la propiedad de integridad de la firma digital:
+cualquier modificacion del documento, por minima que sea, invalida completamente
+la firma. El efecto avalancha de SHA-512 garantiza que incluso un cambio de un
+solo caracter produce un hash completamente distinto, haciendo inviable que un
+atacante modifique el contenido sin que la verificacion lo detecte.
+
+Los cinco archivos generados en `/workspace/samples/signatures/` ilustran cada
+artefacto del proceso: `contract.txt` (original), `contract_clearsigned.asc` (clearsign),
+`contract.txt.sig` (firma detached), `contract_signed.gpg` (binario firmado) y
+`contract_tampered.asc` (documento manipulado para la demostracion).
 
 // ============================================================
 // CP7 - Autoridad Certificadora

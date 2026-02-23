@@ -11,7 +11,7 @@
 #   2. Encrypt the hash with the PRIVATE key -> this is the digital signature
 #   3. Verification: decrypt signature with PUBLIC key -> compare hashes
 
-set PASSPHRASE "CryptoLab2024!"
+set PASSPHRASE "fn-stella-sre"
 set SAMPLES_DIR "/workspace/samples/signatures"
 set DOCUMENT "$SAMPLES_DIR/contract.txt"
 
@@ -22,7 +22,7 @@ function create_document_to_sign
     echo "SERVICE AGREEMENT" > "$DOCUMENT"
     echo "==================" >> "$DOCUMENT"
     echo "" >> "$DOCUMENT"
-    echo "Between: SRE Cryptography Laboratory (Party A)" >> "$DOCUMENT"
+    echo "Between: Stella (Party A)" >> "$DOCUMENT"
     echo "And:     Client Organization (Party B)" >> "$DOCUMENT"
     echo "" >> "$DOCUMENT"
     echo "Terms:" >> "$DOCUMENT"
@@ -149,7 +149,13 @@ function demonstrate_tamper_detection
     cp "$SAMPLES_DIR/contract_clearsigned.asc" "$tampered"
 
     # Modify the document content (simulating tampering)
-    sed -i 's/one year/ten years/' "$tampered"
+    # sed not installed in nixos/nix base; use python3 for in-place string replace
+    python3 -c "
+import sys
+path = sys.argv[1]
+txt = open(path).read().replace('one year', 'ten years')
+open(path, 'w').write(txt)
+" "$tampered"
 
     echo "Document tampered: changed 'one year' to 'ten years'"
     echo "Attempting to verify tampered document..."

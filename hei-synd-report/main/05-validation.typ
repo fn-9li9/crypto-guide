@@ -558,8 +558,129 @@ que permiten expresar con precision la causa de la invalidacion de un certificad
 
 == CP9: Cifrado de Correo Electronico con Certificado Digital
 
-// Pendiente: este caso practico es una guia conceptual (Markdown).
-// Incluir: fragmento de la salida de los comandos OpenSSL smime
-// ejecutados manualmente en el contenedor para validar la guia,
-// o captura del contenido del archivo pc9-secure-email.md con
-// anotaciones sobre los comandos mas relevantes.
+El noveno caso practico es de naturaleza conceptual: explica el estandar S/MIME
+(*Secure/Multipurpose Internet Mail Extensions*) para firma y cifrado de correo
+electronico usando los certificados X.509 generados en PC7 y PC8. A diferencia de
+los casos anteriores, S/MIME requiere un cliente de correo con interfaz grafica
+(Thunderbird, Outlook) para la experiencia completa de usuario final, por lo que
+este caso documenta el proceso y los comandos equivalentes en linea de comandos.
+
+=== Que es S/MIME
+
+S/MIME proporciona los cuatro pilares de la seguridad de la informacion sobre el
+protocolo de correo electronico estandar:
+
+#table(
+  columns: (auto, 1fr),
+  [*Propiedad*], [*Mecanismo*],
+  [Confidencialidad], [Mensaje cifrado con la clave publica del destinatario],
+  [Integridad],      [Hash digest incluido y verificado],
+  [Autenticidad],    [Firmado con la clave privada del remitente],
+  [No repudio],      [El remitente no puede negar haber firmado el mensaje],
+)
+
+=== Proceso de Firma Digital de un Correo
+
+El cliente de correo calcula el hash SHA-256 del contenido, lo cifra con la
+*clave privada* del remitente generando la firma digital, y envia el mensaje
+con la firma y el certificado del remitente adjuntos. El receptor descifra la
+firma con la *clave publica* del remitente y compara el hash resultante con
+el hash del mensaje recibido. Si coinciden, la firma es valida.
+
+El comando equivalente en OpenSSL es:
+
+#figure(
+  sourcecode()[
+`````bash
+openssl smime -sign \
+    -in message.txt \
+    -text \
+    -signer /workspace/pki/users/stella/stella.crt \
+    -inkey /workspace/pki/users/stella/stella.key \
+    -passin pass:UserCertPass2026! \
+    -certfile /workspace/pki/ca/certs/ca.crt \
+    -out message_signed.eml
+`````],
+  caption: [Firma de un mensaje con OpenSSL smime usando el certificado de Stella],
+)
+
+=== Proceso de Cifrado de un Correo
+
+El remitente obtiene el certificado del destinatario (que contiene su clave publica),
+cifra el cuerpo del mensaje con esa clave publica, y envia el mensaje cifrado.
+Solo el destinatario puede descifrarlo con su *clave privada*.
+
+#figure(
+  sourcecode()[
+```bash
+# Cifrar para el destinatario (usando su certificado publico)
+openssl smime -encrypt \
+    -aes256 \
+    -in message.txt \
+    -out message_encrypted.eml \
+    /workspace/pki/users/stella/stella.crt
+
+# Descifrar el mensaje recibido
+openssl smime -decrypt \
+    -in message_encrypted.eml \
+    -inkey /workspace/pki/users/stella/stella.key \
+    -passin pass:UserCertPass2026! \
+    -out message_decrypted.txt
+
+# Verificar la firma de un mensaje recibido
+openssl smime -verify \
+    -in message_signed.eml \
+    -CAfile /workspace/pki/ca/certs/ca.crt \
+    -out message_content.txt
+```],
+  caption: [Cifrado, descifrado y verificacion de correo S/MIME con OpenSSL],
+)
+
+=== Configuracion en Thunderbird
+
+Para usar S/MIME con el certificado generado en PC8, el proceso en Thunderbird es:
+
+#figure(
+  sourcecode()[
+```
+1. Tools > Account Settings > End-To-End Encryption > S/MIME > Manage Certificates
+   Importar: /workspace/pki/users/stella/stella.p12
+   Contrasena: UserCertPass2026!
+
+2. Account Settings > End-To-End Encryption
+   Seleccionar el certificado importado para firma
+   Seleccionar el certificado importado para cifrado
+
+3. Para cifrar a un destinatario: el destinatario debe enviar
+   primero un correo firmado; Thunderbird extrae su certificado
+   automaticamente del mensaje recibido.
+```],
+  caption: [Pasos de configuracion S/MIME en Thunderbird con el certificado de Stella],
+)
+
+=== Cadena de Confianza PKI
+
+El destinatario confia en la firma del correo de Stella porque: la firma fue creada
+con la clave privada de Stella, el certificado de Stella fue emitido y firmado por
+SiTourCA, y el destinatario tiene instalado el certificado raiz de SiTourCA como
+CA de confianza. Esta cadena jerarquica es la diferencia fundamental respecto al
+modelo de confianza descentralizado de GPG/OpenPGP.
+
+#table(
+  columns: (auto, 1fr, 1fr),
+  [*Aspecto*],           [*GPG (OpenPGP)*],              [*S/MIME (X.509)*],
+  [Modelo de confianza], [Web of Trust (descentralizado)],[CA jerarquica (centralizado)],
+  [Emisor del cert],     [Cualquiera puede firmar claves],[CA de confianza obligatoria],
+  [Uso corporativo],     [Poco comun],                   [Estandar empresarial],
+  [Soporte en cliente],  [Requiere plugin],              [Integrado en la mayoria],
+  [Revocacion],          [Keyserver / CRL],              [OCSP / CRL distribution],
+)
+
+=== Nota Operativa SRE
+
+En produccion, el ciclo de vida de los certificados S/MIME debe automatizarse:
+el comando `openssl x509 -in stella.crt -noout -enddate` devuelve la fecha de
+caducidad del certificado y puede integrarse en un sistema de monitorizacion para
+generar alertas antes del vencimiento. Las claves privadas deben almacenarse en
+un gestor de secretos (HashiCorp Vault, AWS Secrets Manager) y nunca en texto
+plano en el sistema de archivos.

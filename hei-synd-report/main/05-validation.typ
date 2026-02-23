@@ -383,10 +383,65 @@ artefacto del proceso: `contract.txt` (original), `contract_clearsigned.asc` (cl
 
 == CP7: Instalacion de la Autoridad Certificadora
 
-// Pendiente: captura de terminal con la ejecucion de
-// bash /workspace/scripts/pc7-certificate-authority.sh
-// Incluir: estructura de directorios creada, datos del certificado CA
-// (Subject, Issuer, Not Before/After, algoritmo), huellas digitales.
+== CP7: Instalacion de la Autoridad Certificadora
+
+El septimo caso practico instala una Autoridad Certificadora raiz funcional equivalente
+a la del libro de texto (Servicios de Certificados de Windows Server), implementada
+con OpenSSL sobre Linux. A diferencia del procedimiento original basado en interfaces
+graficas de Windows 2000, este script es completamente reproducible y ejecutable en
+cualquier entorno con OpenSSL disponible.
+
+#figure(
+  image("../resources/img/cp-7-1.png", width: 100%),
+  caption: [Creacion de la estructura de directorios PKI y generacion del openssl.cnf],
+)
+
+El script inicializa la estructura de directorios de la PKI en `/workspace/pki/ca/` con
+los cinco componentes operativos de una CA: `certs/` para los certificados emitidos,
+`private/` con permisos 700 para la clave privada, `newcerts/` para las copias
+historicas de cada certificado emitido por numero de serie, `crl/` para las Listas de
+Revocacion de Certificados, e `index.txt` como base de datos de certificados. El
+archivo `openssl.cnf` se genera con dos politicas de certificacion: `policy_strict`
+(que exige que los campos C, ST y O del CSR coincidan con los de la CA) y
+`policy_loose` (que solo requiere el CN), junto con las extensiones X.509 v3
+`v3_ca`, `usr_cert` y `server_cert`.
+
+#figure(
+  image("../resources/img/cp-7-2.png", width: 100%),
+  caption: [Generacion de la clave privada RSA 4096, certificado autofirmado, CRL inicial y huellas digitales],
+)
+
+La clave privada de la CA se genera con RSA 4096 bits cifrada con AES-256 y
+permisos 400. El certificado autofirmado tiene una validez de 3650 dias (10 anos),
+lo que es estandar para CAs raiz que no dependen de una CA superior. Los datos
+del certificado emitido son:
+```
+Issuer:  C=PE, ST=Lima, L=Lima, O=SiTour SA, OU=Division de certificados,
+         CN=SiTourCA, emailAddress=stella.sre.inc@gmail.com
+Subject: (identico al Issuer, por ser autofirmado)
+Not Before: Feb 23 13:51:52 2026 GMT
+Not After:  Feb 21 13:51:52 2036 GMT
+```
+
+La CRL inicial se genera vacia inmediatamente tras la instalacion de la CA, con un
+periodo de validez de 30 dias. En produccion, la CRL debe regenerarse y publicarse
+periodicamente antes de su caducidad para que los clientes puedan verificar el estado
+de revocacion de los certificados emitidos.
+
+Las huellas digitales del certificado CA se muestran en SHA-256 y SHA-1 para
+permitir su verificacion fuera de banda. En un despliegue real, estas huellas se
+distribuyen por un canal seguro separado (correo firmado, pagina web con TLS,
+comunicacion presencial) para que los usuarios puedan confirmar que el certificado
+CA que instalan en su almacen de confianza es el autentico y no ha sido sustituido:
+```
+SHA-256: FE:E4:CA:B1:34:F8:D0:A4:82:A6:CB:09:93:AE:96:CB:
+         B9:FE:6F:F6:F2:91:0E:6B:15:C4:6B:AC:13:74:60:54
+SHA-1:   2A:D6:88:4A:6A:93:78:F6:F2:0D:39:AF:63:40:5F:5C:CA:1A:23:9E
+```
+
+La carpeta `newcerts/` queda vacia al finalizar PC7, lo cual es el comportamiento
+correcto: OpenSSL la pobla automaticamente con copias de cada certificado emitido
+(nombradas `01.pem`, `02.pem`, etc.) cuando la CA firma solicitudes CSR en PC8.
 
 // ============================================================
 // CP8 - Solicitud y Revocacion

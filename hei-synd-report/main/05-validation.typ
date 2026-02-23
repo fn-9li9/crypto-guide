@@ -383,8 +383,6 @@ artefacto del proceso: `contract.txt` (original), `contract_clearsigned.asc` (cl
 
 == CP7: Instalacion de la Autoridad Certificadora
 
-== CP7: Instalacion de la Autoridad Certificadora
-
 El septimo caso practico instala una Autoridad Certificadora raiz funcional equivalente
 a la del libro de texto (Servicios de Certificados de Windows Server), implementada
 con OpenSSL sobre Linux. A diferencia del procedimiento original basado en interfaces
@@ -449,11 +447,110 @@ correcto: OpenSSL la pobla automaticamente con copias de cada certificado emitid
 
 == CP8: Solicitud y Revocacion de Certificados
 
-// Pendiente: captura de terminal con la ejecucion de
-// bash /workspace/scripts/pc8-certificate-request.sh
-// Incluir: CSR generado, certificado emitido (datos principales),
-// verificacion de cadena OK, contenido de index.txt antes y despues
-// de la revocacion, resultado de verificacion con -crl_check.
+El octavo caso practico demuestra el ciclo de vida completo de un certificado X.509:
+desde la generacion de la clave privada del usuario hasta la revocacion y verificacion
+del estado revocado mediante CRL. Este flujo es el equivalente automatizado del
+procedimiento manual del libro de texto donde Fernando solicita un certificado a la
+CA SiTourCA a traves de Internet Explorer.
+
+#figure(
+  image("../resources/img/cp-8-1.png", width: 100%),
+  caption: [Verificacion de la CA instalada en PC7 como prerequisito],
+)
+
+El script verifica primero que la CA del caso practico 7 este operativa consultando
+el certificado `ca.crt` y mostrando su subject. A continuacion ejecuta los siete
+pasos del ciclo de vida.
+
+#figure(
+  image("../resources/img/cp-8-2.png", width: 100%),
+  caption: [Step 1 --- Generacion de la clave privada RSA 4096 de Stella],
+)
+
+*Step 1*: Se genera la clave privada RSA 4096 de Stella cifrada con AES-256
+y frase de paso `UserCertPass2026!`. El archivo se almacena con permisos 400
+en `/workspace/pki/users/stella/stella.key`.
+
+#figure(
+  image("../resources/img/cp-8-3.png", width: 100%),
+  caption: [Step 2 --- Creacion del CSR con los datos de identidad de Stella],
+)
+
+*Step 2*: Se crea la Solicitud de Firma de Certificado (CSR) con el subject
+`/C=PE/ST=Lima/L=Lima/O=SiTour SA/OU=Ventas/CN=Stella`. El CSR contiene
+la clave publica de Stella y su informacion de identidad, firmado con su clave
+privada para demostrar posesion de la clave.
+
+#figure(
+  image("../resources/img/cp-8-4.png", width: 100%),
+  caption: [Step 3 --- La CA SiTourCA firma el CSR y emite el certificado serie 01],
+)
+
+*Step 3*: La CA firma el CSR usando `policy_loose` y las extensiones `usr_cert`
+(que habilitan `clientAuth` y `emailProtection`). El certificado emitido tiene
+numero de serie `01`, validez de 365 dias y las extensiones X.509 v3 completas.
+OpenSSL actualiza automaticamente `index.txt` y copia el certificado en
+`newcerts/01.pem`.
+
+#figure(
+  image("../resources/img/cp-8-5.png", width: 100%),
+  caption: [Step 4 --- Verificacion de la cadena de confianza contra la CA raiz],
+)
+
+*Step 4*: La verificacion de la cadena confirma que el certificado de Stella es
+valido y esta firmado por SiTourCA:
+```
+/workspace/pki/users/stella/stella.crt: OK
+```
+
+#figure(
+  image("../resources/img/cp-8-6.png", width: 100%),
+  caption: [Step 5 --- Exportacion del bundle PKCS\#12 para importacion en cliente de correo],
+)
+
+*Step 5*: El bundle PKCS\#12 (`stella.p12`) agrupa el certificado, la clave privada
+y la cadena CA en un unico archivo protegido por frase de paso. Este es el formato
+que Thunderbird, Outlook y otros clientes de correo usan para importar identidades
+digitales y habilitar S/MIME.
+
+#figure(
+  image("../resources/img/cp-8-7.png", width: 100%),
+  caption: [Step 6 --- Revocacion del certificado y actualizacion de la CRL],
+)
+
+*Step 6*: El certificado se revoca con razon `keyCompromise`. La base de datos
+`index.txt` registra el cambio de estado. La CRL actualizada lista el certificado
+con numero de serie `01` como revocado:
+```
+Revoked Certificates:
+    Serial Number: 01
+        Revocation Date: Feb 23 14:02:18 2026 GMT
+        CRL entry extensions:
+            X509v3 CRL Reason Code: Key Compromise
+```
+
+El estado de `index.txt` antes de la revocacion era:
+```
+V  270223140218Z  01  unknown  /C=PE/ST=Lima/.../CN=Stella/...
+```
+Tras la revocacion, la entrada cambia de `V` (Valid) a `R` (Revoked).
+
+#figure(
+  image("../resources/img/cp-8-8.png", width: 100%),
+  caption: [Step 7 --- Verificacion del estado revocado con CRL y tabla de codigos de razon],
+)
+
+*Step 7*: La verificacion con `-crl_check` confirma que el certificado ha sido
+invalidado. OpenSSL devuelve `error 23: certificate revoked`, demostrando que
+cualquier cliente que consulte la CRL rechazara este certificado:
+```
+error 23 at 0 depth lookup: certificate revoked
+error /workspace/pki/users/stella/stella.crt: verification failed
+```
+
+La tabla de codigos de razon de revocacion (0-6) documenta los motivos
+estandarizados por el RFC 5280, desde `keyCompromise` hasta `certificateHold`,
+que permiten expresar con precision la causa de la invalidacion de un certificado.
 
 // ============================================================
 // CP9 - Correo Electronico Cifrado

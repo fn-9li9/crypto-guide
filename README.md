@@ -46,8 +46,8 @@ fish /workspace/scripts/pc3-key-generation.fish
 fish /workspace/scripts/pc4-revocation-certificate.fish
 fish /workspace/scripts/pc5-key-exchange.fish
 fish /workspace/scripts/pc6-digital-signature.fish
-bash /workspace/scripts/pc7-certificate-authority.sh
-bash /workspace/scripts/pc8-certificate-request.sh
+fish /workspace/scripts/pc7-certificate-authority.fish
+fish /workspace/scripts/pc8-certificate-request.fish
 ```
 
 El caso practico 9 es una guia conceptual en Markdown:
